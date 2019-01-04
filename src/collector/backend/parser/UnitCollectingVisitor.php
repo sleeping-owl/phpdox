@@ -1,41 +1,44 @@
 <?php
-    /**
-     * Copyright (c) 2010-2018 Arne Blankerts <arne@blankerts.de>
-     * All rights reserved.
-     *
-     * Redistribution and use in source and binary forms, with or without modification,
-     * are permitted provided that the following conditions are met:
-     *
-     *   * Redistributions of source code must retain the above copyright notice,
-     *     this list of conditions and the following disclaimer.
-     *
-     *   * Redistributions in binary form must reproduce the above copyright notice,
-     *     this list of conditions and the following disclaimer in the documentation
-     *     and/or other materials provided with the distribution.
-     *
-     *   * Neither the name of Arne Blankerts nor the names of contributors
-     *     may be used to endorse or promote products derived from this software
-     *     without specific prior written permission.
-     *
-     * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-     * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT  * NOT LIMITED TO,
-     * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-     * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER ORCONTRIBUTORS
-     * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
-     * OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-     * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-     * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-     * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-     * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-     * POSSIBILITY OF SUCH DAMAGE.
-     *
-     * @package    phpDox
-     * @author     Arne Blankerts <arne@blankerts.de>
-     * @copyright  Arne Blankerts <arne@blankerts.de>, All rights reserved.
-     * @license    BSD License
-     */
+/**
+ * Copyright (c) 2010-2018 Arne Blankerts <arne@blankerts.de>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *
+ *   * Neither the name of Arne Blankerts nor the names of contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT  * NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER ORCONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+ * OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ * @package    phpDox
+ * @author     Arne Blankerts <arne@blankerts.de>
+ * @copyright  Arne Blankerts <arne@blankerts.de>, All rights reserved.
+ * @license    BSD License
+ */
+
 namespace TheSeer\phpDox\Collector\Backend {
 
+    use phpDocumentor\Reflection\DocBlock\Tags\Property;
+    use phpDocumentor\Reflection\Types\Compound;
     use PhpParser\Node\Expr;
     use PhpParser\Node\Expr\Array_;
     use PhpParser\Node\Expr\BinaryOp;
@@ -56,11 +59,17 @@ namespace TheSeer\phpDox\Collector\Backend {
     use TheSeer\phpDox\DocBlock\Parser as DocBlockParser;
     use PhpParser\NodeVisitorAbstract;
     use PhpParser\Node\Stmt as NodeType;
+    use ReflectionClass;
+    use ReflectionMethod;
+    use ReflectionParameter;
+    use phpDocumentor\Reflection\DocBlock\Tags\Generic;
+    use phpDocumentor\Reflection\DocBlockFactory;
 
     /**
      *
      */
-    class UnitCollectingVisitor extends NodeVisitorAbstract {
+    class UnitCollectingVisitor extends NodeVisitorAbstract
+    {
 
         /**
          * @var \TheSeer\phpDox\DocBlock\Parser
@@ -70,7 +79,7 @@ namespace TheSeer\phpDox\Collector\Backend {
         /**
          * @var array
          */
-        private $aliasMap = array();
+        private $aliasMap = [];
 
         /**
          * @var string
@@ -87,17 +96,18 @@ namespace TheSeer\phpDox\Collector\Backend {
          */
         private $unit;
 
-        private $modifier = array(
+        private $modifier = [
             NodeType\Class_::MODIFIER_PUBLIC    => 'public',
             NodeType\Class_::MODIFIER_PROTECTED => 'protected',
             NodeType\Class_::MODIFIER_PRIVATE   => 'private',
-        );
+        ];
 
         /**
          * @param \TheSeer\phpDox\DocBlock\Parser $parser
          * @param ParseResult                     $result
          */
-        public function __construct(DocBlockParser $parser, ParseResult $result) {
+        public function __construct(DocBlockParser $parser, ParseResult $result)
+        {
             $this->docBlockParser = $parser;
             $this->result = $result;
         }
@@ -107,37 +117,51 @@ namespace TheSeer\phpDox\Collector\Backend {
          *
          * @return int|null|\PhpParser\Node|void
          */
-        public function enterNode(\PhpParser\Node $node) {
-            if ($node instanceof NodeType\Namespace_ && $node->name != NULL) {
+        public function enterNode(\PhpParser\Node $node)
+        {
+            if ($node instanceof NodeType\Namespace_ && $node->name != null) {
                 $this->namespace = implode('\\', $node->name->parts);
                 $this->aliasMap['::context'] = $this->namespace;
-            } else if ($node instanceof NodeType\UseUse) {
-                $this->aliasMap[$node->alias] = implode('\\', $node->name->parts);
-            } else if ($node instanceof NodeType\Class_) {
-                $this->aliasMap['::unit'] = (string)$node->namespacedName;
-                $this->unit = $this->result->addClass((string)$node->namespacedName);
-                $this->processUnit($node);
-                return;
-            } else if ($node instanceof NodeType\Interface_) {
-                $this->aliasMap['::unit'] = (string)$node->namespacedName;
-                $this->unit = $this->result->addInterface((string)$node->namespacedName);
-                $this->processUnit($node);
-                return;
-            } else if ($node instanceof NodeType\Trait_) {
-                $this->aliasMap['::unit'] = (string)$node->namespacedName;
-                $this->unit = $this->result->addTrait((string)$node->namespacedName);
-                $this->processUnit($node);
-                return;
-            } else if ($node instanceof NodeType\Property) {
-                $this->processProperty($node);
-                return;
-            } else if ($node instanceof NodeType\ClassMethod) {
-                $this->processMethod($node);
-                return;
-            } elseif ($node instanceof NodeType\ClassConst) {
-                $this->processClassConstant($node);
-            } elseif ($node instanceof NodeType\TraitUse) {
-                $this->processTraitUse($node);
+            } else {
+                if ($node instanceof NodeType\UseUse) {
+                    $this->aliasMap[$node->alias] = implode('\\', $node->name->parts);
+                } else {
+                    if ($node instanceof NodeType\Class_) {
+                        $this->aliasMap['::unit'] = (string)$node->namespacedName;
+                        $this->unit = $this->result->addClass((string)$node->namespacedName);
+                        $this->processUnit($node);
+                        $this->processClass($node, $node->getDocComment());
+                        return;
+                    } else {
+                        if ($node instanceof NodeType\Interface_) {
+                            $this->aliasMap['::unit'] = (string)$node->namespacedName;
+                            $this->unit = $this->result->addInterface((string)$node->namespacedName);
+                            $this->processUnit($node);
+                            return;
+                        } else {
+                            if ($node instanceof NodeType\Trait_) {
+                                $this->aliasMap['::unit'] = (string)$node->namespacedName;
+                                $this->unit = $this->result->addTrait((string)$node->namespacedName);
+                                $this->processUnit($node);
+                                return;
+                            } else {
+                                if ($node instanceof NodeType\Property) {
+                                    $this->processProperty($node);
+                                    return;
+                                } else {
+                                    if ($node instanceof NodeType\ClassMethod) {
+                                        $this->processMethod($node);
+                                        return;
+                                    } elseif ($node instanceof NodeType\ClassConst) {
+                                        $this->processClassConstant($node);
+                                    } elseif ($node instanceof NodeType\TraitUse) {
+                                        $this->processTraitUse($node);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -146,11 +170,10 @@ namespace TheSeer\phpDox\Collector\Backend {
          *
          * @return false|int|null|\PhpParser\Node|\PhpParser\Node[]|void
          */
-        public function leaveNode(\PhpParser\Node $node) {
-            if ($node instanceof NodeType\Class_
-                || $node instanceof NodeType\Interface_
-                || $node instanceof NodeType\Trait_) {
-                $this->unit = NULL;
+        public function leaveNode(\PhpParser\Node $node)
+        {
+            if ($node instanceof NodeType\Class_ || $node instanceof NodeType\Interface_ || $node instanceof NodeType\Trait_) {
+                $this->unit = null;
                 return;
             }
         }
@@ -158,24 +181,25 @@ namespace TheSeer\phpDox\Collector\Backend {
         /**
          * @param $node
          */
-        private function processUnit($node) {
+        private function processUnit($node)
+        {
             $this->unit->setStartLine($node->getAttribute('startLine'));
             $this->unit->setEndLine($node->getAttribute('endLine'));
             if ($node instanceof NodeType\Class_) {
                 $this->unit->setAbstract($node->isAbstract());
                 $this->unit->setFinal($node->isFinal());
             } else {
-                $this->unit->setAbstract(FALSE);
-                $this->unit->setFinal(FALSE);
+                $this->unit->setAbstract(false);
+                $this->unit->setFinal(false);
             }
 
             $docComment = $node->getDocComment();
-            if ($docComment !== NULL) {
+            if ($docComment !== null) {
                 $block = $this->docBlockParser->parse($docComment, $this->aliasMap);
                 $this->unit->setDocBlock($block);
             }
 
-            if ($node->getType() != 'Stmt_Trait' && $node->extends !== NULL) {
+            if ($node->getType() != 'Stmt_Trait' && $node->extends !== null) {
                 if (is_array($node->extends)) {
                     $extendsArray = $node->extends;
                     foreach ($extendsArray as $extends) {
@@ -187,34 +211,33 @@ namespace TheSeer\phpDox\Collector\Backend {
             }
 
             if ($node->getType() === 'Stmt_Class') {
-                foreach($node->implements as $implements) {
+                foreach ($node->implements as $implements) {
                     $this->unit->addImplements(implode('\\', $implements->parts));
                 }
             }
         }
 
-        private function processTraitUse(NodeType\TraitUse $node) {
-            foreach($node->traits as $trait) {
-                $traitUse = $this->unit->addTrait( (string)$trait );
+        private function processTraitUse(NodeType\TraitUse $node)
+        {
+            foreach ($node->traits as $trait) {
+                $traitUse = $this->unit->addTrait((string)$trait);
                 $traitUse->setStartLine($node->getAttribute('startLine'));
                 $traitUse->setEndLine($node->getAttribute('endLine'));
             }
 
-            foreach($node->adaptations as $adaptation) {
+            foreach ($node->adaptations as $adaptation) {
                 if ($adaptation instanceof NodeType\TraitUseAdaptation\Alias) {
                     if ($adaptation->trait instanceof FullyQualified) {
                         $traitUse = $this->getTraitUse((string)$adaptation->trait);
-                    } else if (count($node->traits) === 1) {
-                        $traitUse = $this->getTraitUse( (string)$node->traits[0]);
                     } else {
-                        $traitUse = $this->unit->getAmbiguousTraitUse();
+                        if (count($node->traits) === 1) {
+                            $traitUse = $this->getTraitUse((string)$node->traits[0]);
+                        } else {
+                            $traitUse = $this->unit->getAmbiguousTraitUse();
+                        }
                     }
 
-                    $traitUse->addAlias(
-                        $adaptation->method,
-                        $adaptation->newName,
-                        $adaptation->newModifier ? $this->modifier[$adaptation->newModifier] : NULL
-                    );
+                    $traitUse->addAlias($adaptation->method, $adaptation->newName, $adaptation->newModifier ? $this->modifier[$adaptation->newModifier] : null);
 
                     continue;
                 }
@@ -226,20 +249,15 @@ namespace TheSeer\phpDox\Collector\Backend {
                     continue;
                 }
 
-                throw new ParseErrorException(
-                    sprintf('Unexpected adaption type %s', get_class($adaptation)),
-                    ParseErrorException::UnexpectedExpr
-                );
+                throw new ParseErrorException(sprintf('Unexpected adaption type %s', get_class($adaptation)), ParseErrorException::UnexpectedExpr);
             }
 
         }
 
-        private function getTraitUse($traitName) {
-            if (!$this->unit->usesTrait($traitName)) {
-                throw new ParseErrorException(
-                    sprintf('Referenced trait "%s" not used', $traitName),
-                    ParseErrorException::GeneralParseError
-                );
+        private function getTraitUse($traitName)
+        {
+            if ( ! $this->unit->usesTrait($traitName)) {
+                throw new ParseErrorException(sprintf('Referenced trait "%s" not used', $traitName), ParseErrorException::GeneralParseError);
             }
             return $this->unit->getTraitUse($traitName);
         }
@@ -247,7 +265,8 @@ namespace TheSeer\phpDox\Collector\Backend {
         /**
          * @param NodeType\ClassMethod $node
          */
-        private function processMethod(NodeType\ClassMethod $node) {
+        private function processMethod(NodeType\ClassMethod $node)
+        {
 
             /** @var $method \TheSeer\phpDox\Collector\MethodObject */
             $method = $this->unit->addMethod($node->name);
@@ -268,7 +287,7 @@ namespace TheSeer\phpDox\Collector\Backend {
             $method->setVisibility($visibility);
 
             $docComment = $node->getDocComment();
-            if ($docComment !== NULL) {
+            if ($docComment !== null) {
                 $block = $this->docBlockParser->parse($docComment, $this->aliasMap);
                 $method->setDocBlock($block);
             }
@@ -280,12 +299,21 @@ namespace TheSeer\phpDox\Collector\Backend {
             }
         }
 
-        private function processMethodReturnType(MethodObject $method, $returnType) {
+        private function processMethodReturnType(MethodObject $method, $returnType)
+        {
             if ($returnType === null) {
                 return;
             }
 
-            if (in_array($returnType, ['void','float','int','string','bool','callable','array'])) {
+            if (in_array($returnType, [
+                'void',
+                'float',
+                'int',
+                'string',
+                'bool',
+                'callable',
+                'array'
+            ])) {
                 $returnTypeObject = $method->setReturnType($returnType);
                 $returnTypeObject->setNullable(false);
                 return;
@@ -308,23 +336,19 @@ namespace TheSeer\phpDox\Collector\Backend {
             }
 
             if ($returnType instanceof \PhpParser\Node\Name) {
-                $returnTypeObject = $method->setReturnType(
-                    $this->unit->getName()
-                );
+                $returnTypeObject = $method->setReturnType($this->unit->getName());
                 $returnTypeObject->setNullable(false);
                 return;
             }
 
-            throw new ParseErrorException(
-                sprintf("Unexpected return type definition %s",
-                    get_class($returnType)
-                ),ParseErrorException::UnexpectedExpr);
+            throw new ParseErrorException(sprintf("Unexpected return type definition %s", get_class($returnType)), ParseErrorException::UnexpectedExpr);
         }
 
-        private function processInlineComments(MethodObject $method, array $stmts) {
-            foreach($stmts as $stmt) {
+        private function processInlineComments(MethodObject $method, array $stmts)
+        {
+            foreach ($stmts as $stmt) {
                 if ($stmt->hasAttribute('comments')) {
-                    foreach($stmt->getAttribute('comments') as $comment) {
+                    foreach ($stmt->getAttribute('comments') as $comment) {
                         $inline = new InlineComment($comment->getLine(), $comment->getText());
                         if ($inline->getCount() != 0) {
                             $method->addInlineComment($inline);
@@ -336,11 +360,12 @@ namespace TheSeer\phpDox\Collector\Backend {
 
         /**
          * @param MethodObject $method
-         * @param array                                $params
+         * @param array        $params
          */
-        private function processMethodParams(MethodObject $method, array $params) {
-            foreach($params as $param) {
-                /** @var $param \PhpParser\Node\Param  */
+        private function processMethodParams(MethodObject $method, array $params)
+        {
+            foreach ($params as $param) {
+                /** @var $param \PhpParser\Node\Param */
                 $parameter = $method->addParameter($param->name);
                 $parameter->setByReference($param->byRef);
                 $this->setVariableType($parameter, $param->type);
@@ -348,7 +373,8 @@ namespace TheSeer\phpDox\Collector\Backend {
             }
         }
 
-        private function processClassConstant(NodeType\ClassConst $node) {
+        private function processClassConstant(NodeType\ClassConst $node)
+        {
             $constNode = $node->consts[0];
             $const = $this->unit->addConstant($constNode->name);
 
@@ -363,13 +389,14 @@ namespace TheSeer\phpDox\Collector\Backend {
             }
 
             $docComment = $node->getDocComment();
-            if ($docComment !== NULL) {
+            if ($docComment !== null) {
                 $block = $this->docBlockParser->parse($docComment, $this->aliasMap);
                 $const->setDocBlock($block);
             }
         }
 
-        private function processProperty(NodeType\Property $node) {
+        private function processProperty(NodeType\Property $node)
+        {
             $property = $node->props[0];
             $member = $this->unit->addMember($property->name);
             if ($node->props[0]->default) {
@@ -384,20 +411,21 @@ namespace TheSeer\phpDox\Collector\Backend {
             $member->setVisibility($visibility);
             $member->setStatic($node->isStatic());
             $docComment = $node->getDocComment();
-            if ($docComment !== NULL) {
+            if ($docComment !== null) {
                 $block = $this->docBlockParser->parse($docComment, $this->aliasMap);
                 $member->setDocBlock($block);
             }
             $member->setLine($node->getLine());
         }
 
-        private function setVariableType(AbstractVariableObject $variable, $type = NULL) {
+        private function setVariableType(AbstractVariableObject $variable, $type = null)
+        {
             if ($type instanceof NullableType) {
                 $variable->setNullable(true);
                 $type = $type->type;
             }
 
-            if ($type === NULL) {
+            if ($type === null) {
                 $variable->setType('{unknown}');
                 return;
             }
@@ -408,101 +436,104 @@ namespace TheSeer\phpDox\Collector\Backend {
             }
 
             if ($type instanceof \PhpParser\Node\Name\FullyQualified) {
-                $variable->setType( (string)$type);
+                $variable->setType((string)$type);
                 return;
             }
 
             $type = (string)$type;
             if (isset($this->aliasMap[$type])) {
                 $type = $this->aliasMap[$type];
-            } elseif ($type[0]!=='\\') {
+            } elseif ($type[0] !== '\\') {
                 $type = $this->namespace . '\\' . $type;
             }
             $variable->setType($type);
         }
 
-        private function resolveExpressionValue(Expr $expr) {
+        private function resolveExpressionValue(Expr $expr)
+        {
             if ($expr instanceof String_) {
-                return array(
-                    'type' => 'string',
+                return [
+                    'type'  => 'string',
                     'value' => $expr->getAttribute('originalValue')
-                );
+                ];
             }
 
-            if ($expr instanceof LNumber ||
-                $expr instanceof UnaryMinus ||
-                $expr instanceof UnaryPlus) {
-                return array(
-                    'type' => 'integer',
+            if ($expr instanceof LNumber || $expr instanceof UnaryMinus || $expr instanceof UnaryPlus) {
+                return [
+                    'type'  => 'integer',
                     'value' => $expr->getAttribute('originalValue')
-                );
+                ];
             }
 
             if ($expr instanceof DNumber) {
-                return array(
-                    'type' => 'float',
+                return [
+                    'type'  => 'float',
                     'value' => $expr->getAttribute('originalValue')
-                );
+                ];
             }
 
             if ($expr instanceof Array_) {
-                return array(
-                    'type' => 'array',
-                    'value' => '' // @todo add array2xml?
-                );
+                return [
+                    'type'  => 'array',
+                    'value' => ''
+                    // @todo add array2xml?
+                ];
             }
 
             if ($expr instanceof ClassConstFetch) {
-                return array(
-                    'type' => '{unknown}',
-                    'value' => '',
+                return [
+                    'type'     => '{unknown}',
+                    'value'    => '',
                     'constant' => implode('\\', $expr->class->parts) . '::' . $expr->name
-                );
+                ];
             }
 
             if ($expr instanceof ConstFetch) {
                 $reference = implode('\\', $expr->name->parts);
                 if (strtolower($reference) === 'null') {
-                    return array(
+                    return [
                         'value' => 'NULL'
-                    );
+                    ];
                 }
-                if (in_array(strtolower($reference), array('true', 'false'))) {
-                    return array(
-                        'type' => 'boolean',
+                if (in_array(strtolower($reference), [
+                    'true',
+                    'false'
+                ])) {
+                    return [
+                        'type'  => 'boolean',
                         'value' => $reference
-                    );
+                    ];
                 }
-                return array(
-                    'type' => '{unknown}',
-                    'value' => '',
+                return [
+                    'type'     => '{unknown}',
+                    'value'    => '',
                     'constant' => implode('\\', $expr->name->parts)
-                );
+                ];
             }
 
             if ($expr instanceof MagicConst\Line) {
-                return array(
-                    'type' => 'integer',
-                    'value' => '',
+                return [
+                    'type'     => 'integer',
+                    'value'    => '',
                     'constant' => $expr->getName()
-                );
+                ];
             }
 
             if ($expr instanceof MagicConst) {
-                return array(
-                    'type' => 'string',
-                    'value' => '',
+                return [
+                    'type'     => 'string',
+                    'value'    => '',
                     'constant' => $expr->getName()
-                );
+                ];
             }
 
             if ($expr instanceof BinaryOp) {
                 $code = (new \PhpParser\PrettyPrinter\Standard)->prettyPrint([$expr]);
 
-                return array(
-                    'type' => 'expression',
-                    'value' => substr($code,0,-1)
-                );
+                return [
+                    'type'  => 'expression',
+                    'value' => substr($code, 0, -1)
+                ];
 
             }
 
@@ -519,8 +550,9 @@ namespace TheSeer\phpDox\Collector\Backend {
          *
          * @throws ParseErrorException
          */
-        private function setVariableDefaultValue(AbstractVariableObject $variable, Expr $default = NULL) {
-            if ($default === NULL) {
+        private function setVariableDefaultValue(AbstractVariableObject $variable, Expr $default = null)
+        {
+            if ($default === null) {
                 return;
             }
 
@@ -533,6 +565,32 @@ namespace TheSeer\phpDox\Collector\Backend {
 
             if (isset($resolved['constant'])) {
                 $variable->setConstant($resolved['constant']);
+            }
+        }
+
+        private function processClass(\PhpParser\Node $node, string $comment = null)
+        {
+            if ( ! $comment) {
+                return;
+            }
+            $docBlock = DocBlockFactory::createInstance()->create($comment);
+            $tags = $docBlock->getTagsByName('property');
+
+            /** @var Property $tag */
+            foreach ($tags as $tag) {
+                $member = $this->unit->addMember($tag->getVariableName());
+                $member->setVisibility('public');
+                $member->setStatic(false);
+                $type = $tag->getType();
+                if ($type instanceof Compound) {
+                    $type = $type->get(0);
+                }
+                if ($type instanceof \phpDocumentor\Reflection\Types\Array_) {
+                    $member->setType('array');
+                } else {
+                    $member->setType((string)$tag->getType());
+                }
+                $member->setLine($node->getLine());
             }
         }
     }
